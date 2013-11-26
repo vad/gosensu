@@ -11,7 +11,6 @@ import (
 	"io/ioutil"
 	"log"
 	"net/http"
-	"reflect"
 	"sync"
 )
 
@@ -33,24 +32,6 @@ func init() {
 	apiHost = fmt.Sprintf("%s:%d", config.Api.Host, config.Api.Port)
 }
 
-type ContentTyper interface {
-	SetType(t string)
-}
-
-func ContentType() martini.Handler {
-	return func(rw http.ResponseWriter, c martini.Context) {
-		c.MapTo(&contentType{rw}, (*ContentTyper)(nil))
-	}
-}
-
-type contentType struct {
-	rw http.ResponseWriter
-}
-
-func (c *contentType) SetType(t string) {
-	c.rw.Header().Set("Content-Type", t)
-}
-
 func main() {
 	client := &http.Client{}
 
@@ -58,20 +39,17 @@ func main() {
 	m.Use(auth.Basic(config.Dashboard.User, config.Dashboard.Password))
 	m.Use(render.Renderer("templates"))
 
-	m.Use(ContentType())
-
 	m.Get("/", func(r render.Render) {
 		r.HTML(200, "index.tmpl", "")
 	})
 
-	m.Get("/all", func(ct ContentTyper) string {
+	m.Get("/all", func(w http.ResponseWriter) string {
 		var wg sync.WaitGroup
 		var mu sync.Mutex
 
-		ct.SetType("application/json;charset=utf-8")
+		w.Header().Set("Content-Type", "application/json")
 
 		routes := []string{"events", "checks", "clients", "stashes", "info"}
-		// routes := []string{"events"}
 		outMap := make(map[string]interface{})
 
 		for _, route := range routes {
@@ -119,8 +97,8 @@ func main() {
 		return string(out)
 	})
 
-	m.Get("/.*", func(req *http.Request, ct ContentTyper) (int, string) {
-		ct.SetType("application/json;charset=utf-8")
+	m.Get("/.*", func(w http.ResponseWriter, req *http.Request) (int, string) {
+		w.Header().Set("Content-Type", "application/json")
 
 		req.URL.Host = apiHost
 		req.URL.Scheme = "http"
@@ -140,24 +118,9 @@ func main() {
 		return clientRes.StatusCode, string(out)
 	})
 
-	m.Post("/.*", func(req *http.Request, ct ContentTyper) (int, string) {
-		ct.SetType("application/json")
+	proxyOr502 := func(w http.ResponseWriter, req *http.Request) (int, string) {
+		w.Header().Set("Content-Type", "application/json")
 
-		req.URL.Host = apiHost
-		req.URL.Scheme = "http"
-		req.RequestURI = ""
-		clientRes, err := client.Do(req)
-
-		if err != nil {
-			return 502, "{}"
-		}
-		defer clientRes.Body.Close()
-
-		out, _ := ioutil.ReadAll(clientRes.Body)
-		return clientRes.StatusCode, string(out)
-	})
-
-	m.Delete("/.*", func(req *http.Request) (int, string) {
 		req.URL.Host = apiHost
 		req.URL.Scheme = "http"
 		req.RequestURI = ""
@@ -171,7 +134,11 @@ func main() {
 
 		out, _ := ioutil.ReadAll(clientRes.Body)
 		return clientRes.StatusCode, string(out)
-	})
+	}
+
+	m.Post("/.*", proxyOr502)
+
+	m.Delete("/.*", proxyOr502)
 
 	http.ListenAndServe(fmt.Sprintf(":%d", config.Dashboard.Port), m)
 }
