@@ -24,7 +24,7 @@ Instead of upgrading to a small EC2 instance, I chose to reinvent the wheel and 
 What
 ----
 
-The sensu dashboard is just 250 lines of ruby code and tons of javascript and CSS (i suppose, never looked at them). The ruby code is just a proxy over the sensu API serving static files.
+The sensu dashboard is just 250 lines of ruby code and tons of javascript and CSS (i suppose, never looked at them). The ruby code is just a proxy over the sensu API and an HTTP static file server.
 
 I just did a cp of the static files, and wrote 150 lines of Go to replace the server. It should just work.
 
