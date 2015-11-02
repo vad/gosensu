@@ -1,3 +1,5 @@
+**UPDATE**: there is an [official Sensu dashboard written in go](https://github.com/sensu/uchiwa). Use that.
+
 A Golang clone of the [Sensu](http://sensuapp.org/) dashboard. Lightweight.
 
 Get and run
